@@ -59,6 +59,7 @@ import geopandas as gpd
 import os
 from osgeo import gdal
 import glob
+import time
 
 
 
@@ -108,6 +109,7 @@ class CrossProfilesAlgorithm(QgsProcessingAlgorithm):
         var1 = int(self.parameterAsString(parameters, self.VAR1, context))
         var = int(self.parameterAsString(parameters, self.VAR, context))
         
+        output_folder = output_folder.rstrip("\\") + "\\"
         
         #################################Checking CRS for inputs######################
         ## Get the first LAS file in the LAS folder
@@ -129,31 +131,39 @@ class CrossProfilesAlgorithm(QgsProcessingAlgorithm):
         else:
             feedback.pushInfo("CRS do match: Input Point Cloud CRS: {} - Input Shapefile CRS: {}".format(crs1.authid(), crs3.authid()))
 
+        
+        start_time_step1 = time.time()  # Start the timer for the processing step
+
         ## Processing_point_cloud ##
         output_directory = QFileInfo(output_folder).path()
         
         output_file = f'{output_directory}/merged.las' 
-        feedback.pushInfo("Merging LAS files...") 
+        feedback.pushInfo("Merging LAS files...") # Merged_point_cloud_and_filtered
         processing.run("LAStools:LasMergePro", {
             'INPUT_DIRECTORY': las_folder,
             'INPUT_WILDCARDS': '*.las',
             'FILES_ARE_FLIGHTLINES': False,
             'APPLY_FILE_SOURCE_ID': False,
-            'OUTPUT_LASLAZ': output_file, # Merged_point_cloud
+            'OUTPUT_LASLAZ': output_file,
             'ADDITIONAL_OPTIONS': '',
             'VERBOSE': False,
             'CPU64': True,
             'GUI': False
         })
-        
-        #Filter point cloud
+        elapsed_time_step1 = time.time() - start_time_step1  # Measure elapsed time for step 1
+        feedback.pushInfo(f"Time elapsed for merging LAS files: {elapsed_time_step1} seconds")
+
+        start_time_filter = time.time()  # Start the timer for the processing step
+
         output_filter = f'{output_directory}/filter.las' 
-        feedback.pushInfo("Filtering LAS files...") 
+        feedback.pushInfo("Filtering LAS files...") #merged_point_cloud_and_filtered
         processing.run("pdal:filter", {'INPUT': output_file,
-        'FILTER_EXPRESSION':'Classification = 2 ', #filter
+        'FILTER_EXPRESSION':'Classification = 2 ',
         'FILTER_EXTENT':None,
-        'OUTPUT':output_filter}) #merged_point_cloud_and_filtered
-       
+        'OUTPUT':output_filter})
+        elapsed_time_filter = time.time() - start_time_filter  # Measure elapsed time for step 1
+        feedback.pushInfo(f"Time elapsed for filtering LAS files: {elapsed_time_filter} seconds")
+                    
         #Boundary of Point Cloud for cliping river and DEM
         boundary = f'{output_directory}/extracted_boundary.shp'
           
@@ -163,27 +173,32 @@ class CrossProfilesAlgorithm(QgsProcessingAlgorithm):
                         'FILTER_RETURN_CLASS_FLAGS1':7,'MODE':0,'CONCAVITY':50,'HOLES':True,'DISJOINT':True,
                         'LABELS':False,'OUTPUT_VECTOR':boundary,'ADDITIONAL_OPTIONS':''})
         
-        #Assingnig projection for vector layer (boundary)
+        #Assingnig projection for vector layer
         processing.run("qgis:definecurrentprojection", 
                        {'INPUT':boundary,
                         'CRS':QgsCoordinateReferenceSystem(crs1)
                         })
                         
-        #Creating DEM 
+        start_time_DEM = time.time()
+        
         output_file2 = f'{output_directory}/DEM_1.tif'
         feedback.pushInfo("Creating DEM ...")
         processing.run("pdal:exportrastertin", 
         {'INPUT':output_filter,'RESOLUTION':0.5,'TILE_SIZE':1000,'FILTER_EXPRESSION':'','FILTER_EXTENT':None,'ORIGIN_X':None,
         'ORIGIN_Y':None,'OUTPUT':output_file2})
         
-        #Clipping DEM
         output_file3 = f'{output_directory}/DEM.tif'
-        feedback.pushInfo("Clipping DEM ...")
+        feedback.pushInfo("clipping DEM ...")
         processing.run("gdal:cliprasterbymasklayer", 
         {'INPUT':output_file2,'MASK':boundary,'SOURCE_CRS': crs1,'TARGET_CRS': crs1,'TARGET_EXTENT':None,'NODATA':None,'ALPHA_BAND':False,'CROP_TO_CUTLINE':True,'KEEP_RESOLUTION':False,'SET_RESOLUTION':False,'X_RESOLUTION':None,'Y_RESOLUTION':None,'MULTITHREADING':False,
         'OPTIONS':'','DATA_TYPE':0,'EXTRA':'','OUTPUT':output_file3})
-                  
+        
+        elapsed_time_DEM = time.time() - start_time_DEM  # Measure elapsed time for step 1
+        feedback.pushInfo(f"Time elapsed for creating DEM: {elapsed_time_DEM} seconds")
+
+                               
     #################################################### Line (river) editing#################################################
+        start_time_profiles = time.time()
         #Clip river by las boundary
         step_1 = processing.run("native:clip",
                        {'INPUT':shapefile_path,
@@ -217,7 +232,6 @@ class CrossProfilesAlgorithm(QgsProcessingAlgorithm):
         output_file5 = f'{output_directory}/profile_01.shp'
         output_file6 = f'{output_directory}/profiles.shp'
 
-        #creating profile lines
         result5 = processing.run("sagang:profilesfromlines",
                                  {'DEM': output_file3,
                                   'VALUES': None,
@@ -225,14 +239,12 @@ class CrossProfilesAlgorithm(QgsProcessingAlgorithm):
                                   'NAME': 'ID',
                                   'PROFILE': output_file5,
                                   'PROFILES': output_file6, 'SPLIT': False})
-        
-        #point layer with elevation and distance values for creat
+                                  
         output_file09 = f'{output_directory}/profile.shp'
         processing.run("native:fieldcalculator", {'INPUT':output_file5,
                                                   'FIELD_NAME':'LINE_ID','FIELD_TYPE':1,'FIELD_LENGTH':10,
                                                   'FIELD_PRECISION':0,'FORMULA':'"LINE_ID"+1','OUTPUT':output_file09})
                                           
-        #Profile layer for preview
         output_file9 = f'{output_directory}/Profile_layer.shp'
         result6 = processing.run("native:joinattributesbylocation",
                                  {'INPUT': result4['OUTPUT'], 'PREDICATE': [0],
@@ -250,7 +262,10 @@ class CrossProfilesAlgorithm(QgsProcessingAlgorithm):
         for file_path in files_to_remove:
            os.remove(file_path)
            
+        elapsed_time_profiles = time.time() - start_time_profiles  # Measure elapsed time for step 1
+        feedback.pushInfo(f"Time elapsed for creating profiles: {elapsed_time_profiles} seconds")
         ####################################################Graph#################################################                                  
+        start_time_graphs= time.time()
         gdf = gpd.read_file(os.path.join(output_directory, 'profile.shp'))
 
         for line_id, group in gdf.groupby('LINE_ID'):
@@ -294,7 +309,8 @@ class CrossProfilesAlgorithm(QgsProcessingAlgorithm):
             plt.savefig(output_path)
             plt.close()  # Close the figure after saving
             
-        ############################# preview ############################################################
+        elapsed_time_graphs = time.time() - start_time_graphs  # Measure elapsed time for step 1
+        feedback.pushInfo(f"Time elapsed for creating graphs: {elapsed_time_graphs} seconds")
 
         DEM_layer = QgsRasterLayer(output_file3, 'DEM')
         profile_layer = QgsVectorLayer(output_file9, 'Profile_layer', 'ogr')
@@ -307,18 +323,15 @@ class CrossProfilesAlgorithm(QgsProcessingAlgorithm):
         manager = QgsProject.instance().layoutManager()
         layoutName = 'Layout'
         layouts_list = manager.layouts()
-        
         # Remove any duplicate layouts
         for layout in layouts_list:
             if layout.name() == layoutName:
                 manager.removeLayout(layout)
-                
         # Specify the layout name
         layout = QgsPrintLayout(QgsProject.instance())
         layout.initializeDefaults()
         layout.setName(layoutName)
         manager.addLayout(layout)
-        
         # Create map item in layout
         map = QgsLayoutItemMap(layout)
         map.setRect(20, 20, 20, 20)
@@ -326,21 +339,10 @@ class CrossProfilesAlgorithm(QgsProcessingAlgorithm):
         # Set map extent
         rect = QgsRectangle(DEM_layer.extent())
         map.setExtent(rect)
-
-        # Resize and zoom the map item
         map.attemptMove(QgsLayoutPoint(5, 20, QgsUnitTypes.LayoutMillimeters))
         map.attemptResize(QgsLayoutSize(285, 185, QgsUnitTypes.LayoutMillimeters))
         map.zoomToExtent(DEM_layer.extent())
-
-        # Add the map item to the layout
         layout.addLayoutItem(map)
-        
-        #style for line feature
-        symbol = QgsLineSymbol.createSimple({'color': 'red', 'width': '0.2'})
-        renderer = QgsSingleSymbolRenderer(symbol)
-        profile_layer.setRenderer(renderer)
-        profile_layer.triggerRepaint()
-        
         # Adding title
         title = QgsLayoutItemLabel(layout)
         title_text_format = QgsTextFormat()
@@ -366,7 +368,7 @@ class CrossProfilesAlgorithm(QgsProcessingAlgorithm):
         buffer_settings = QgsTextBufferSettings()
         buffer_settings.setEnabled(True)
         buffer_settings.setColor(QColor(255, 255, 255))
-        buffer_settings.setSize(0.5)
+        buffer_settings.setSize(0.3)
         text_format.setBuffer(buffer_settings)
         label_settings.setFormat(text_format)
         labeler = QgsVectorLayerSimpleLabeling(label_settings)
@@ -374,13 +376,13 @@ class CrossProfilesAlgorithm(QgsProcessingAlgorithm):
         profile_layer.setLabeling(labeler)
         profile_layer.triggerRepaint()
 
-        #export preview
         layout = manager.layoutByName(layoutName)
         exporter = QgsLayoutExporter(layout)
         feedback.pushInfo(f"Saving preview to {os.path.join(output_directory, 'preview.png')}")
         preview = os.path.join(output_directory, 'preview.png')
         exporter.exportToImage(preview, QgsLayoutExporter.ImageExportSettings())
-              
+
+        
         return {}
 
     def name(self):

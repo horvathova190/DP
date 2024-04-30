@@ -179,7 +179,7 @@ class CrossProfilesAlgorithm(QgsProcessingAlgorithm):
         processing.run("LAStools:LasBoundary", 
                        {'VERBOSE':False,'CPU64':False,'GUI':False,
                         'INPUT_LASLAZ':output_filter,
-                        'FILTER_RETURN_CLASS_FLAGS1':7,'MODE':0,'CONCAVITY':50,'HOLES':True,'DISJOINT':True,
+                        'FILTER_RETURN_CLASS_FLAGS1':0,'MODE':0,'CONCAVITY':50,'HOLES':True,'DISJOINT':True,
                         'LABELS':False,'OUTPUT_VECTOR':boundary,'ADDITIONAL_OPTIONS':''})
         
         #Assingnig projection for vector layer

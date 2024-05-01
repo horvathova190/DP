@@ -251,7 +251,7 @@ class CrossProfilesAlgorithm(QgsProcessingAlgorithm):
                                   'PROFILE': output_profile,
                                   'PROFILES': output_profiles, 'SPLIT': False})
         
-        attribute_layer = QgsVectorLayer(output_profile, "Profile Layer", "ogr")
+        attribute_layer = QgsVectorLayer(output_profile, "profile", "ogr")
         fields = attribute_layer.fields()
         field_name = fields[0].name()
       

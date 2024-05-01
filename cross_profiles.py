@@ -239,7 +239,7 @@ class CrossProfilesAlgorithm(QgsProcessingAlgorithm):
                                   'EXPRESSION': expr,
                                   'OUTPUT': 'TEMPORARY_OUTPUT'})
         
-        output_profile_01 = f'{output_directory}/profile_01.shp'
+        output_profile = f'{output_directory}/profile.shp'
         output_profiles = f'{output_directory}/profiles.shp'
         
         #creating profile lines
@@ -248,27 +248,25 @@ class CrossProfilesAlgorithm(QgsProcessingAlgorithm):
                                   'VALUES': None,
                                   'LINES': result4['OUTPUT'],  
                                   'NAME': 'ID',
-                                  'PROFILE': output_profile_01,
+                                  'PROFILE': output_profile,
                                   'PROFILES': output_profiles, 'SPLIT': False})
         
-        #point layer with elevation and distance values for creating graphs
-        output_profile_final = f'{output_directory}/profile.shp'
-        processing.run("native:fieldcalculator", {'INPUT':output_profile_01,
-                                                  'FIELD_NAME':'LINE_ID','FIELD_TYPE':1,'FIELD_LENGTH':10,
-                                                  'FIELD_PRECISION':0,'FORMULA':'"LINE_ID"+1','OUTPUT':output_profile_final})
+        attribute_layer = QgsVectorLayer(output_profile, "Profile Layer", "ogr")
+        fields = attribute_layer.fields()
+        field_name = fields[0].name()
+      
         
         #Profile layer for preview
         output_Profile_layer = f'{output_directory}/Profile_layer.shp'
         result6 = processing.run("native:joinattributesbylocation",
                                  {'INPUT': result4['OUTPUT'], 'PREDICATE': [0],
-                                  'JOIN': output_profile_final,
-                                  'JOIN_FIELDS': ['LINE_ID'], 'METHOD': 0,
+                                  'JOIN': output_profile,
+                                  'JOIN_FIELDS': field_name, 'METHOD': 0,
                                   'DISCARD_NONMATCHING': True, 'PREFIX': '', 'OUTPUT': output_Profile_layer})
   
         #deleting temporary (unnecessary) files
         files_to_remove = []
         files_to_remove.extend(glob.glob(os.path.join(output_directory, "DTM_1.*")))
-        files_to_remove.extend(glob.glob(os.path.join(output_directory, "profile_01.*")))
         files_to_remove.extend(glob.glob(os.path.join(output_directory, "profiles_01.*")))
         files_to_remove.extend(glob.glob(os.path.join(output_directory, "extracted_boundary.*")))
        
@@ -281,7 +279,7 @@ class CrossProfilesAlgorithm(QgsProcessingAlgorithm):
         start_time_graphs= time.time()
         gdf = gpd.read_file(os.path.join(output_directory, 'profile.shp'))
 
-        for line_id, group in gdf.groupby('LINE_ID'):
+        for id_line, group in gdf.groupby(field_name):
             x_data = []
             y_data = []
 
@@ -317,14 +315,14 @@ class CrossProfilesAlgorithm(QgsProcessingAlgorithm):
 
             plt.grid(color='gray', linestyle='-', linewidth=0.1)
 
-            output_path = os.path.join(output_directory, f'profile_{line_id}.png')
-            feedback.pushInfo(f"Saving profile {line_id} to {output_path}")
+            output_path = os.path.join(output_directory, f'profile_{id_line}.png')
+            feedback.pushInfo(f"Saving profile {id_line} to {output_path}")
 
             # style
             plt.plot(x_data, y_data, linestyle='-', color='blue', linewidth=.5, label='graph')
             plt.xlabel('distance [m]')
             plt.ylabel('elevation [m]')
-            plt.title(f'Cross-section profile {line_id}')
+            plt.title(f'Cross-section profile {id_line}')
 
             plt.savefig(output_path)
             plt.close()  # Close the figure after saving
@@ -391,7 +389,7 @@ class CrossProfilesAlgorithm(QgsProcessingAlgorithm):
         
         # Adding labels
         label_settings = QgsPalLayerSettings()
-        label_settings.fieldName = "LINE_ID"
+        label_settings.fieldName = field_name
         label_settings.enabled = True
         label_settings.placement = QgsPalLayerSettings.Line
         label_settings.overrunDistance=(2)

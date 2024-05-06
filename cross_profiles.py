@@ -7,7 +7,7 @@
         Copyright            : (C) 2024 by k_hor
         Email                : horvathova190@uniba.sk
         Description:         : This tool is based on Master's thesis: Creating of River Cross Profiles from Lidar Data.\
-                               It integrates LAS files and shapefiles containing river data to generate cross-sectional profiles at specified intervals.\
+                               It integrates LAS files and vector files containing river data (line features) to generate cross-sectional profiles at specified intervals.\
                                These profiles are exported as PNG image files and displayed alongside a terrain map preview.
 
 /***************************************************************************
@@ -22,11 +22,8 @@
 
 from qgis.PyQt.QtCore import QCoreApplication, QFileInfo
 from qgis.core import (QgsProcessing,
-                       QgsFeatureSink,
-                       QgsProcessingException,
                        QgsProcessingAlgorithm,
                        QgsProcessingParameterFeatureSource,
-                       QgsProcessingParameterFeatureSink,
                        QgsProcessingParameterString, 
                        QgsProcessingParameterVectorLayer,
                        QgsProcessingParameterFile, 
@@ -46,7 +43,6 @@ from qgis.core import (QgsProcessing,
                        QgsVectorLayer, 
                        QgsCoordinateReferenceSystem,
                        QgsPointCloudLayer, 
-                       QgsMessageLog,
                        QgsProject,
                        QgsLineSymbol,
                        QgsSingleSymbolRenderer,
@@ -66,10 +62,10 @@ import time
 class CrossProfilesAlgorithm(QgsProcessingAlgorithm):
 
     INPUT_LAS_FOLDER = 'INPUT_LAS_FOLDER'
-    INPUT_SHAPEFILE = 'INPUT_SHAPEFILE'
+    LINE_INPUT = 'LINE_INPUT'
     OUTPUT_FOLDER = 'OUTPUT_FOLDER'
-    VAR1 = 'VAR1'
-    VAR = 'VAR'
+    Width = 'Width'
+    Spacing = 'Spacing'
 
     def initAlgorithm(self, config=None):
         self.addParameter(QgsProcessingParameterFile(
@@ -79,21 +75,21 @@ class CrossProfilesAlgorithm(QgsProcessingAlgorithm):
 
         self.addParameter(
             QgsProcessingParameterFeatureSource(
-                self.INPUT_SHAPEFILE,
-                self.tr('Input Shapefile'),
+                self.LINE_INPUT,
+                self.tr('Line Input'),
                 [QgsProcessing.TypeVectorLine]
 
             )
         )
         self.addParameter(
             QgsProcessingParameterString(
-                self.VAR1,
+                self.Width,
                 self.tr('Width')
             )
         )
         self.addParameter(
             QgsProcessingParameterString(
-                self.VAR,
+                self.Spacing,
                 self.tr('Spacing')
             )
         )
@@ -104,10 +100,10 @@ class CrossProfilesAlgorithm(QgsProcessingAlgorithm):
 
     def processAlgorithm(self, parameters, context, feedback):
         las_folder = self.parameterAsString(parameters, self.INPUT_LAS_FOLDER, context)
-        shapefile_path = self.parameterAsVectorLayer(parameters, self.INPUT_SHAPEFILE, context)
+        line_path = self.parameterAsVectorLayer(parameters, self.LINE_INPUT, context)
         output_folder = self.parameterAsString(parameters, self.OUTPUT_FOLDER, context)
-        var1 = int(self.parameterAsString(parameters, self.VAR1, context))
-        var = int(self.parameterAsString(parameters, self.VAR, context))
+        Width = int(self.parameterAsString(parameters, self.Width, context))
+        Spacing = int(self.parameterAsString(parameters, self.Spacing, context))
         
         output_folder = output_folder.rstrip("\\") + "\\"
 
@@ -121,15 +117,15 @@ class CrossProfilesAlgorithm(QgsProcessingAlgorithm):
         feedback.pushInfo("Checking CRS for inputs...")
         layer1_proj = QgsPointCloudLayer(first_las_file, 'merged.las', 'pdal')
         crs1 = layer1_proj.crs()
-        crs3 = shapefile_path.crs()
+        crs3 = line_path.crs()
         
         #Checking if CRS matches
         if crs1 != crs3:
-            feedback.pushInfo("CRS do not match: Input Point Cloud CRS: {} - Input Shapefile CRS: {}".format(crs1.authid(), crs3.authid()))
-            raise QgsProcessingException("CRS do not match between input LAS files and input shapefile.")
+            feedback.pushInfo("CRS do not match: Input Point Cloud CRS: {} - Line Input CRS: {}".format(crs1.authid(), crs3.authid()))
+            raise QgsProcessingException("CRS do not match between input LAS files and line input.")
 
         else:
-            feedback.pushInfo("CRS do match: Input Point Cloud CRS: {} - Input Shapefile CRS: {}".format(crs1.authid(), crs3.authid()))
+            feedback.pushInfo("CRS do match: Input Point Cloud CRS: {} - Line Input CRS: {}".format(crs1.authid(), crs3.authid()))
 
         def format_time(elapsed_time):
             minutes = int(elapsed_time // 60)
@@ -190,18 +186,12 @@ class CrossProfilesAlgorithm(QgsProcessingAlgorithm):
                         
         start_time_DTM = time.time()
         
-        output_DTM_1 = f'{output_directory}/DTM_1.tif'
+        output_DTM = f'{output_directory}/DTM.tif'
         feedback.pushInfo("Creating DTM ...")
         processing.run("pdal:exportrastertin", 
         {'INPUT':output_filter,'RESOLUTION':0.5,'TILE_SIZE':1000,'FILTER_EXPRESSION':'','FILTER_EXTENT':None,'ORIGIN_X':None,
-        'ORIGIN_Y':None,'OUTPUT':output_DTM_1})
-        
-        output_DTM_final = f'{output_directory}/DTM.tif'
-        feedback.pushInfo("clipping DTM ...")
-        processing.run("gdal:cliprasterbymasklayer", 
-        {'INPUT':output_DTM_1,'MASK':boundary,'SOURCE_CRS': crs1,'TARGET_CRS': crs1,'TARGET_EXTENT':None,'NODATA':None,'ALPHA_BAND':False,'CROP_TO_CUTLINE':True,'KEEP_RESOLUTION':False,'SET_RESOLUTION':False,'X_RESOLUTION':None,'Y_RESOLUTION':None,'MULTITHREADING':False,
-        'OPTIONS':'','DATA_TYPE':0,'EXTRA':'','OUTPUT':output_DTM_final})
-        
+        'ORIGIN_Y':None,'OUTPUT':output_DTM})
+                
         elapsed_time_DTM = time.time() - start_time_DTM  # Measure elapsed time for step 1
         feedback.pushInfo(f"Time elapsed for creating DTM: {format_time(elapsed_time_DTM)}")
 
@@ -211,7 +201,7 @@ class CrossProfilesAlgorithm(QgsProcessingAlgorithm):
         
         #Clip river by las boundary
         step_1 = processing.run("native:clip",
-                       {'INPUT':shapefile_path,
+                       {'INPUT':line_path,
                         'OVERLAY':boundary,
                         'OUTPUT':'TEMPORARY_OUTPUT'})
         
@@ -228,11 +218,11 @@ class CrossProfilesAlgorithm(QgsProcessingAlgorithm):
         #Creating transect (lines of profiles)
         result3 = processing.run("native:transect",
                                  {'INPUT': result2['OUTPUT'],
-                                  'LENGTH': var1, 'ANGLE': 90, 'SIDE': 2,
+                                  'LENGTH': Width, 'ANGLE': 90, 'SIDE': 2,
                                   'OUTPUT': 'TEMPORARY_OUTPUT'})
                 
         #Extraction of profiles selected by user based on expression
-        expr = f'"TR_ID" % {var} = 0'
+        expr = f'"TR_ID" % {Spacing} = 0'
 
         result4 = processing.run("native:extractbyexpression",
                                  {'INPUT': result3['OUTPUT'],
@@ -244,7 +234,7 @@ class CrossProfilesAlgorithm(QgsProcessingAlgorithm):
         
         #creating profile lines
         result5 = processing.run("sagang:profilesfromlines",
-                                 {'DEM': output_DTM_final,
+                                 {'DEM': output_DTM,
                                   'VALUES': None,
                                   'LINES': result4['OUTPUT'],  
                                   'NAME': 'ID',
@@ -266,7 +256,6 @@ class CrossProfilesAlgorithm(QgsProcessingAlgorithm):
   
         #deleting temporary (unnecessary) files
         files_to_remove = []
-        files_to_remove.extend(glob.glob(os.path.join(output_directory, "DTM_1.*")))
         files_to_remove.extend(glob.glob(os.path.join(output_directory, "profiles_01.*")))
         files_to_remove.extend(glob.glob(os.path.join(output_directory, "extracted_boundary.*")))
        
@@ -300,17 +289,17 @@ class CrossProfilesAlgorithm(QgsProcessingAlgorithm):
             plt.figure(figsize=(20, 6))
             min_y = min(y_data)
             max_y = max(y_data)
-            y_var = max_y - min_y
-            step_size = y_var / 10  # intervals for axis Y
+            y_Spacing = max_y - min_y
+            step_size = y_Spacing / 10  # intervals for axis Y
 
-            yticks = [round(min_y + i * step_size, 2) for i in range(int(y_var / step_size) + 1)]
+            yticks = [round(min_y + i * step_size, 2) for i in range(int(y_Spacing / step_size) + 1)]
             plt.yticks(yticks)
             min_x = min(x_data)
             max_x = max(x_data)
-            x_var = max_x - min_x
-            step_size_x = x_var / 10  # intervals for axis X
+            x_Spacing = max_x - min_x
+            step_size_x = x_Spacing / 10  # intervals for axis X
 
-            xticks = [round(min_x + i * step_size_x, 2) for i in range(int(x_var / step_size_x) + 1)]
+            xticks = [round(min_x + i * step_size_x, 2) for i in range(int(x_Spacing / step_size_x) + 1)]
             xticks_labels = [f'{x / 10:.2f}' for x in xticks]  # dist/100
 
             plt.grid(color='gray', linestyle='-', linewidth=0.1)
@@ -332,7 +321,7 @@ class CrossProfilesAlgorithm(QgsProcessingAlgorithm):
         
         ############################# preview ############################################################
 
-        DTM_layer = QgsRasterLayer(output_DTM_final, 'DTM')
+        DTM_layer = QgsRasterLayer(output_DTM, 'DTM')
         profile_layer = QgsVectorLayer(output_Profile_layer, 'Profile_layer', 'ogr')
 
         #Adding_layers
@@ -441,7 +430,7 @@ class CrossProfilesAlgorithm(QgsProcessingAlgorithm):
         parameters and outputs associated with it..
         """
         return self.tr("Cross profiles is a QGIS tool designed for creating cross-sectional profile graphs from LiDAR data.\
-        It integrates LAS files and shapefiles with rivers, to generate cross-sectional profiles at specified intervals.\
+        It integrates LAS files and vector lines, to generate cross-sectional profiles at specified intervals.\
         It exports these profiles as PNG image files and displays them alongside a terrain map preview.\n\
         <b>Note:<b>\n\
         Before running the tool, make sure you have installed the matplotlib and geopandas libraries on your PC.\

@@ -4,6 +4,11 @@ It's  designed for QGIS (3.32 and later). You need plugins to run it - Sagang an
 Outputs of this tool are multiple and all of them will save to folder of your choice. These outputs are - merged (only if you have multiple files in folder) and filtered point cloud,
 digital terrain model, two sets of profile layers, profile graphs and map preview. 
 
+Useful lines in the script:
+  line 192 - if you want to change the DMT resolution, change value of this paramter by your choice: 'RESOLUTION': 'resolution'
+  line 165 - if you want to change value for filtering point cloud, change value in parameter - 'FILTER_EXPRESSION':'Classification = Classification_value_by_your_choice'; 
+                                                                                                for example: 'FILTER_EXPRESSION': Classification = 2
+
 
 
 You can see a test run of the tool in this video:

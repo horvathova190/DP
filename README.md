@@ -7,6 +7,7 @@ digital terrain model, two sets of profile layers, profile graphs and map previe
 Useful lines in the script:
   line 165 - if you want to change value for filtering point cloud, change value in parameter - 'FILTER_EXPRESSION':'Classification = Classification_value_by_your_choice'; 
                                                                                                 for example: 'FILTER_EXPRESSION': Classification = 2
+
   line 192 - if you want to change the DMT resolution, change value of this paramter by your choice: 'RESOLUTION': 'resolution'
 
 

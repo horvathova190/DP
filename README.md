@@ -5,6 +5,7 @@ Outputs of this tool are multiple and all of them will save to folder of your ch
 digital terrain model, two sets of profile layers, profile graphs and map preview. 
 
 Useful lines in the script:
+
   line 165 - if you want to change value for filtering point cloud, change value in parameter - 'FILTER_EXPRESSION':'Classification = Classification_value_by_your_choice'; 
                                                                                                 for example: 'FILTER_EXPRESSION': Classification = 2
 

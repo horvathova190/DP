@@ -323,12 +323,12 @@ class CrossProfilesAlgorithm(QgsProcessingAlgorithm):
         feedback.pushInfo(f"Time elapsed for creating graphs: {format_time(elapsed_time_graphs)}")
         
         ############################# preview ############################################################
-        QgsProject.instance().addMapLayer(profile_layer)
         # Vytvorenie vrstvy z výstupu result6
         DTM_layer = QgsRasterLayer(output_DTM, 'DTM')
         # Pridanie vrstiev do projektu)
         QgsProject.instance().addMapLayer(DTM_layer)
-        
+        QgsProject.instance().addMapLayer(profile_layer)
+
 
         # Access the layout manager
         manager = QgsProject.instance().layoutManager()

@@ -252,7 +252,7 @@ class CrossProfilesAlgorithm(QgsProcessingAlgorithm):
         result6 = processing.run("native:joinattributesbylocation",
                                  {'INPUT': result4['OUTPUT'], 'PREDICATE': [0],
                                   'JOIN': output_profile,
-                                  'JOIN_FIELDS': field_name, 'METHOD': 0,
+                                  'JOIN_FIELDS': field_name, 'METHOD': 1,
                                   'DISCARD_NONMATCHING': True, 'PREFIX': '', 'OUTPUT':'TEMPORARY_OUTPUT'})
         profile_layer = result6['OUTPUT']
 

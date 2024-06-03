@@ -46,7 +46,7 @@ from qgis.core import (QgsProcessing,
                        QgsProject,
                        QgsLineSymbol,
                        QgsSingleSymbolRenderer,
-                       QgsProcessingException, 
+                       QgsProcessingException
                        )
 from PyQt5.QtGui import QColor
 from qgis import processing
@@ -245,17 +245,14 @@ class CrossProfilesAlgorithm(QgsProcessingAlgorithm):
         fields = attribute_layer.fields()
         field_name = fields[0].name()
       
-      
-        output_Profile_layer = os.path.join(output_directory, 'Profile_layer.shp')
-
-        # Spustenie nástroja na vytvorenie vrstvy
+        
+        #Profile layer for preview
+        output_Profile_layer = f'{output_directory}/Profile_layer.shp'
         result6 = processing.run("native:joinattributesbylocation",
                                  {'INPUT': result4['OUTPUT'], 'PREDICATE': [0],
                                   'JOIN': output_profile,
                                   'JOIN_FIELDS': field_name, 'METHOD': 0,
-                                  'DISCARD_NONMATCHING': True, 'PREFIX': '', 'OUTPUT':'TEMPORARY_OUTPUT'})
-        profile_layer = result6['OUTPUT']
-
+                                  'DISCARD_NONMATCHING': True, 'PREFIX': '', 'OUTPUT': output_Profile_layer})
   
         #deleting temporary (unnecessary) files
         files_to_remove = []
@@ -323,12 +320,13 @@ class CrossProfilesAlgorithm(QgsProcessingAlgorithm):
         feedback.pushInfo(f"Time elapsed for creating graphs: {format_time(elapsed_time_graphs)}")
         
         ############################# preview ############################################################
-        QgsProject.instance().addMapLayer(profile_layer)
-        # Vytvorenie vrstvy z výstupu result6
+
         DTM_layer = QgsRasterLayer(output_DTM, 'DTM')
-        # Pridanie vrstiev do projektu)
+        profile_layer = QgsVectorLayer(output_Profile_layer, 'Profile_layer', 'ogr')
+
+        #Adding_layers
         QgsProject.instance().addMapLayer(DTM_layer)
-        
+        QgsProject.instance().addMapLayer(profile_layer)
 
         # Access the layout manager
         manager = QgsProject.instance().layoutManager()
@@ -407,7 +405,7 @@ class CrossProfilesAlgorithm(QgsProcessingAlgorithm):
         feedback.pushInfo(f"Saving preview to {os.path.join(output_directory, 'preview.png')}")
         preview = os.path.join(output_directory, 'preview.png')
         exporter.exportToImage(preview, QgsLayoutExporter.ImageExportSettings())
-
+              
         return {}
 
     def name(self):
@@ -446,4 +444,3 @@ class CrossProfilesAlgorithm(QgsProcessingAlgorithm):
 
     def createInstance(self):
         return CrossProfilesAlgorithm()
-
